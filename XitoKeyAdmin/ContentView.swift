@@ -4,8 +4,8 @@ import UIKit
 struct ContentView: View {
     @StateObject private var service = FirebaseService()
 
-    @State private var apiKey = ""
-    @State private var adminEmail = ""
+    @State private var apiKey = UserDefaults.standard.string(forKey: "xito_api_key") ?? ""
+    @State private var adminEmail = UserDefaults.standard.string(forKey: "xito_admin_email") ?? ""
     @State private var adminPassword = ""
 
     @State private var selectedPresetIndex = 0
@@ -13,6 +13,9 @@ struct ContentView: View {
     @State private var singleDevice = true
     @State private var keyCode = ""
     @State private var keyNote = ""
+
+    @State private var searchText = ""
+    @State private var editingKeyItem: LicenseKeyItem? = nil
 
     let presets: [(title: String, hours: Int, tag: String, perm: Bool)] = [
         ("1 Día (24h)", 24, "1D", false),
@@ -22,6 +25,14 @@ struct ContentView: View {
         ("Permanente", 876000, "VIP", true)
     ]
 
+    var filteredKeys: [LicenseKeyItem] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q.isEmpty { return service.keys }
+        return service.keys.filter {
+            $0.key.lowercased().contains(q) || ($0.note ?? "").lowercased().contains(q)
+        }
+    }
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -29,23 +40,35 @@ struct ContentView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
+                        // Estado del servidor
                         VStack(alignment: .leading, spacing: 6) {
                             Text("XITO MODS • KEY ADMIN")
                                 .font(.title2).bold()
                                 .foregroundColor(Color(red: 0, green: 0.9, blue: 0.46))
                             Text(service.statusMessage)
                                 .font(.caption)
-                                .foregroundColor(.green.opacity(0.8))
+                                .foregroundColor(service.isErrorStatus ? .red : .green.opacity(0.9))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
+                        // Auth Admin
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(service.isAuthenticated ? "Sesión Admin Activa" : "Login Admin (Opcional en modo prueba)")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(Color(red: 0, green: 0.9, blue: 0.46))
+                            HStack {
+                                Text(service.isAuthenticated ? "Sesión Admin Activa" : "Login Admin (Firebase Auth)")
+                                    .font(.caption).bold()
+                                    .foregroundColor(Color(red: 0, green: 0.9, blue: 0.46))
+                                Spacer()
+                                if service.isAuthenticated {
+                                    Button("Cerrar") {
+                                        service.signOut()
+                                    }
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.red)
+                                }
+                            }
                             TextField("Clave de API web (AIzaSy...)", text: $apiKey)
                                 .textFieldStyle(.roundedBorder)
                             TextField("Correo Admin", text: $adminEmail)
@@ -66,6 +89,7 @@ struct ContentView: View {
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
+                        // Crear nueva key
                         VStack(alignment: .leading, spacing: 10) {
                             Text("CREAR NUEVA KEY")
                                 .font(.headline)
@@ -105,9 +129,10 @@ struct ContentView: View {
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
+                        // Lista de Keys en servidor
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Text("KEYS EN SERVIDOR")
+                                Text("KEYS EN SERVIDOR (\(service.keys.count))")
                                     .font(.headline)
                                     .foregroundColor(Color(red: 0, green: 0.9, blue: 0.46))
                                 Spacer()
@@ -118,36 +143,74 @@ struct ContentView: View {
                                 .foregroundColor(.green)
                             }
 
-                            ForEach(service.keys) { item in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.key)
-                                        .font(.system(.body, design: .monospaced)).bold()
-                                        .foregroundColor(.white)
-                                    Text(item.permanent ? "Permanente" : "\(item.durationHours)h • \(item.maxDevices == 1 ? "1 Disp." : "Multi")")
-                                        .font(.caption)
-                                        .foregroundColor(.green.opacity(0.8))
-                                    HStack {
-                                        Button("Copiar") {
-                                            UIPasteboard.general.string = item.key
-                                            service.statusMessage = "Copiada: \(item.key)"
+                            TextField("Buscar key o nota...", text: $searchText)
+                                .textFieldStyle(.roundedBorder)
+
+                            if filteredKeys.isEmpty {
+                                Text("No hay keys para mostrar. Toca Actualizar o revisa la sesión/reglas.")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                    .padding(.vertical, 8)
+                            } else {
+                                ForEach(filteredKeys) { item in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.key)
+                                                .font(.system(.body, design: .monospaced)).bold()
+                                                .foregroundColor(.white)
+                                            Spacer()
+                                            Text(statusBadge(for: item))
+                                                .font(.system(size: 11, weight: .bold))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 3)
+                                                .background(item.active ? Color.green.opacity(0.25) : Color.red.opacity(0.25))
+                                                .foregroundColor(item.active ? .green : .red)
+                                                .cornerRadius(6)
                                         }
-                                        .buttonStyle(.bordered)
-                                        Button("Reset HWID") {
-                                            var updated = item
-                                            updated.boundDevice = ""
-                                            service.saveKey(updated)
+
+                                        Text(metaDescription(for: item))
+                                            .font(.caption)
+                                            .foregroundColor(.green.opacity(0.85))
+
+                                        if let note = item.note, !note.isEmpty {
+                                            Text("Nota: \(note)")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
                                         }
-                                        .buttonStyle(.bordered)
-                                        Button("Borrar", role: .destructive) {
-                                            service.deleteKey(item.key)
+
+                                        HStack(spacing: 6) {
+                                            Button("Copiar") {
+                                                UIPasteboard.general.string = item.key
+                                                service.statusMessage = "Copiada: \(item.key)"
+                                                service.isErrorStatus = false
+                                            }
+                                            .buttonStyle(.bordered)
+
+                                            Button("Editar") {
+                                                editingKeyItem = item
+                                            }
+                                            .buttonStyle(.bordered)
+
+                                            Button("Reset") {
+                                                var updated = item
+                                                updated.boundDevice = ""
+                                                updated.firstLoginAt = 0
+                                                service.saveKey(updated)
+                                            }
+                                            .buttonStyle(.bordered)
+
+                                            Button("Borrar", role: .destructive) {
+                                                service.deleteKey(item.key)
+                                            }
+                                            .buttonStyle(.bordered)
                                         }
-                                        .buttonStyle(.bordered)
+                                        .font(.system(size: 11, weight: .semibold))
                                     }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding()
+                                    .background(Color(red: 0.07, green: 0.22, blue: 0.14))
+                                    .cornerRadius(10)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                                .background(Color(red: 0.07, green: 0.22, blue: 0.14))
-                                .cornerRadius(10)
                             }
                         }
                         .padding()
@@ -161,7 +224,35 @@ struct ContentView: View {
             .onAppear {
                 service.fetchKeys()
             }
+            .sheet(item: $editingKeyItem) { itemToEdit in
+                EditKeySheet(item: itemToEdit) { updatedItem in
+                    service.saveKey(updatedItem)
+                }
+            }
         }
+    }
+
+    func statusBadge(for item: LicenseKeyItem) -> String {
+        if !item.active { return "Pausada" }
+        if item.permanent { return "Permanente" }
+        if item.firstLoginAt <= 0 { return "Sin usar (\(item.durationHours)h)" }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let totalMs = Int64(item.durationHours) * 3600 * 1000
+        let remMs = totalMs - (nowMs - item.firstLoginAt)
+        if remMs <= 0 { return "Vencida" }
+        let hours = remMs / (3600 * 1000)
+        return "\(hours)h rest."
+    }
+
+    func metaDescription(for item: LicenseKeyItem) -> String {
+        let dur = item.permanent ? "Ilimitada" : "\(item.durationHours)h"
+        let dev: String
+        if item.maxDevices == 1 {
+            dev = item.boundDevice.isEmpty ? "1 Disp. (Libre)" : "1 Disp. (\(item.boundDevice))"
+        } else {
+            dev = "Multidispositivo"
+        }
+        return "\(dur) • \(dev)"
     }
 
     func createKey() {
@@ -193,5 +284,89 @@ struct ContentView: View {
         service.saveKey(newItem)
         UIPasteboard.general.string = finalCode
         keyCode = ""
+        customDays = ""
+        keyNote = ""
+    }
+}
+
+struct EditKeySheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let originalItem: LicenseKeyItem
+    let onSave: (LicenseKeyItem) -> Void
+
+    @State private var isActive: Bool
+    @State private var isPermanent: Bool
+    @State private var durationHoursText: String
+    @State private var isSingleDevice: Bool
+    @State private var boundDeviceText: String
+    @State private var resetTimer: Bool = false
+    @State private var noteText: String
+
+    init(item: LicenseKeyItem, onSave: @escaping (LicenseKeyItem) -> Void) {
+        self.originalItem = item
+        self.onSave = onSave
+        _isActive = State(initialValue: item.active)
+        _isPermanent = State(initialValue: item.permanent)
+        _durationHoursText = State(initialValue: String(item.durationHours))
+        _isSingleDevice = State(initialValue: item.maxDevices == 1)
+        _boundDeviceText = State(initialValue: item.boundDevice)
+        _noteText = State(initialValue: item.note ?? "")
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Key")) {
+                    Text(originalItem.key)
+                        .font(.system(.body, design: .monospaced)).bold()
+                }
+
+                Section(header: Text("Estado y Duración")) {
+                    Toggle("Key Activa", isOn: $isActive)
+                    Toggle("Permanente (Sin vencimiento)", isOn: $isPermanent)
+                    if !isPermanent {
+                        TextField("Duración en horas (ej. 24, 168, 720)", text: $durationHoursText)
+                            .keyboardType(.numberPad)
+                    }
+                    Toggle("Reiniciar tiempo de inicio", isOn: $resetTimer)
+                }
+
+                Section(header: Text("Dispositivo (HWID)")) {
+                    Toggle("1 Solo Dispositivo", isOn: $isSingleDevice)
+                    TextField("ID Dispositivo vinculado (vacío = libre)", text: $boundDeviceText)
+                    Button("Limpiar HWID vinculado") {
+                        boundDeviceText = ""
+                    }
+                }
+
+                Section(header: Text("Nota")) {
+                    TextField("Nota / Cliente", text: $noteText)
+                }
+            }
+            .navigationTitle("Editar Key")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        var updated = originalItem
+                        updated.active = isActive
+                        updated.permanent = isPermanent
+                        updated.durationHours = Int(durationHoursText) ?? originalItem.durationHours
+                        updated.maxDevices = isSingleDevice ? 1 : 999
+                        updated.boundDevice = boundDeviceText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if resetTimer {
+                            updated.firstLoginAt = 0
+                        }
+                        updated.note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onSave(updated)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
