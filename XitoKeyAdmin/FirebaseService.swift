@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 struct LicenseKeyItem: Identifiable, Codable {
     var id: String { key }
@@ -27,7 +28,8 @@ class FirebaseService: ObservableObject {
     }
 
     func signInAdmin(apiKey: String, email: String, password: String) {
-        guard let url = URL(string: "\(Self.authURL)?key=\(apiKey)") else { return }
+        let encodedKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? apiKey
+        guard let url = URL(string: "\(Self.authURL)?key=\(encodedKey)") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

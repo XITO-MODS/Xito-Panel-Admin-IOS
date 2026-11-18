@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @StateObject private var service = FirebaseService()
@@ -28,7 +29,6 @@ struct ContentView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Estado
                         VStack(alignment: .leading, spacing: 6) {
                             Text("XITO MODS • KEY ADMIN")
                                 .font(.title2).bold()
@@ -42,7 +42,6 @@ struct ContentView: View {
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
-                        // Auth Admin opcional
                         VStack(alignment: .leading, spacing: 8) {
                             Text(service.isAuthenticated ? "Sesión Admin Activa" : "Login Admin (Opcional en modo prueba)")
                                 .font(.caption).bold()
@@ -67,7 +66,6 @@ struct ContentView: View {
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
-                        // Crear Key
                         VStack(alignment: .leading, spacing: 10) {
                             Text("CREAR NUEVA KEY")
                                 .font(.headline)
@@ -107,7 +105,6 @@ struct ContentView: View {
                         .background(Color(red: 0.05, green: 0.15, blue: 0.09))
                         .cornerRadius(14)
 
-                        // Lista de Keys
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Text("KEYS EN SERVIDOR")
