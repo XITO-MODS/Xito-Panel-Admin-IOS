@@ -44,7 +44,7 @@ struct ContentView: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text(service.isAuthenticated ? "Sesión Admin Activa" : "Login Admin (Opcional en modo prueba)")
-                                .font(.caption).bold()
+                                .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(Color(red: 0, green: 0.9, blue: 0.46))
                             TextField("Clave de API web (AIzaSy...)", text: $apiKey)
                                 .textFieldStyle(.roundedBorder)
@@ -114,7 +114,7 @@ struct ContentView: View {
                                 Button("Actualizar") {
                                     service.fetchKeys()
                                 }
-                                .font(.caption).bold()
+                                .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(.green)
                             }
 
