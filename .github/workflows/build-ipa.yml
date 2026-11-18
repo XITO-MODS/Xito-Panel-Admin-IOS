@@ -20,6 +20,7 @@ jobs:
 
       - name: Compilar App iOS (Sin firma)
         run: |
+          set -o pipefail
           xcodebuild -project XitoKeyAdmin.xcodeproj \
             -scheme XitoKeyAdmin \
             -configuration Release \
@@ -29,7 +30,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            SWIFT_COMPILATION_MODE=singlefile \
+            build 2>&1 | tee xcodebuild.log || (echo "=== ERRORES DE COMPILACION ===" && grep -i "error:" xcodebuild.log | head -n 30 && exit 1)
 
       - name: Empaquetar archivo .ipa
         run: |
